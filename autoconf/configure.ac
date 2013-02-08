@@ -1,7 +1,7 @@
 dnl **************************************************************************
 dnl * Initialize
 dnl **************************************************************************
-AC_INIT([[[LLVM-analysis]]],[[[0.00]]],[sdmoore@fas.harvard.edu])
+AC_INIT([[analysis]],[[0.00]],[sdmoore@fas.harvard.edu])
 
 dnl Identify where LLVM source tree is
 LLVM_SRC_ROOT="`(cd $srcdir/../..; pwd)`"
@@ -25,7 +25,7 @@ dnl Configure project makefiles
 dnl List every Makefile that exists within your source tree
 AC_CONFIG_MAKEFILE(Makefile)
 AC_CONFIG_MAKEFILE(lib/Makefile)
-AC_CONFIG_MAKEFILE(runtime/Makefile)
+AC_CONFIG_MAKEFILE(tools/Makefile)
 AC_CONFIG_MAKEFILE(test/Makefile)
 
 dnl **************************************************************************

@@ -1,6 +1,5 @@
-# Set the name of the project here
-PROJECT_NAME := analysis
-PROJ_VERSION := 0.00
+PROJECT_NAME := miso
+PROJ_VERSION := 1.0
 
 # Set this variable to the top of the LLVM source tree.
 LLVM_SRC_ROOT = @LLVM_SRC@
@@ -9,7 +8,9 @@ LLVM_SRC_ROOT = @LLVM_SRC@
 # (this is *not* the same as OBJ_ROOT as defined in LLVM's Makefile.config).
 LLVM_OBJ_ROOT = @LLVM_OBJ@
 
-# Set the directory root of this project's source files
+# Set the source root and source directory pathnames
+####PROJ_SRC_DIR := $(subst //,/,@abs_top_srcdir@/$(patsubst $(PROJ_OBJ_ROOT)%,%,$(PROJ_OBJ_DIR)))
+
 PROJ_SRC_ROOT := $(subst //,/,@abs_top_srcdir@)
 
 # Set the root directory of this project's object files
@@ -18,9 +19,17 @@ PROJ_OBJ_ROOT := $(subst //,/,@abs_top_builddir@)
 # Set the root directory of this project's install prefix
 PROJ_INSTALL_ROOT := @prefix@
 
-# Configuration file to set paths specific to local installation of LLVM
-include $(PROJ_OBJ_ROOT)/Makefile.llvm.config
+# Set the location of the LLVM Test Suite
+TEST_SRCDIR := @testsrcdir@
+TEST_OBJDIR := @testobjdir@
 
-# Include all of the build rules used for making LLVM
-include $(PROJ_SRC_ROOT)/Makefile.llvm.rules
+# All of the code should additionally look inside the pool allocation source
+# code for include files
+SC_FLAGS = -Werror -Wall -fexceptions
+CFLAGS   += $(SC_FLAGS)
+CPPFLAGS += $(SC_FLAGS)
+CXXFLAGS += $(SC_FLAGS) -Wno-deprecated -Wno-overloaded-virtual
+
+# Include LLVM's Master Makefile.
+include $(LLVM_SRC_ROOT)/Makefile.common
 
