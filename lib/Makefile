@@ -8,6 +8,6 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-DIRS=
+DIRS=Analysis
 
 include $(LEVEL)/Makefile.common
