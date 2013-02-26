@@ -175,7 +175,7 @@ template <> struct GraphTraits<ControlDependenceGraph *>
   }
 };
 
-template <> struct DOTGraphTraits<const ControlDependenceGraph *>
+template <> struct DOTGraphTraits<ControlDependenceGraph*>
   : public DefaultDOTGraphTraits {
   DOTGraphTraits(bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
 
@@ -183,11 +183,22 @@ template <> struct DOTGraphTraits<const ControlDependenceGraph *>
     return "Control dependence graph";
   }
 
-  std::string getNodeLabel(const ControlDependenceNode *Node, const ControlDependenceGraph *Graph) {
+  std::string getNodeLabel(ControlDependenceNode *Node, ControlDependenceGraph *Graph) {
     if (Node->isRegion()) {
       return "REGION";
     } else {
       return Node->getBlock()->hasName() ? Node->getBlock()->getName() : "ENTRY";
+    }
+  }
+
+  static std::string getEdgeSourceLabel(ControlDependenceNode *Node, ControlDependenceNode::iterator I) {
+    switch (Node->getEdgeType(*I)) {
+    case ControlDependenceNode::TRUE:
+      return "T";
+    case ControlDependenceNode::FALSE:
+      return "F";
+    case ControlDependenceNode::OTHER:
+      return "";
     }
   }
 };
