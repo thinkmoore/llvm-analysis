@@ -1,4 +1,4 @@
-//===- llvm/Analysis/ControlDependenceGraph.cpp -----------------*- C++ -*-===//
+//===- Analysis/ControlDependenceGraph.cpp ----------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -28,55 +28,38 @@ namespace llvm {
 
 char ControlDependenceGraph::ID = 0;
 
-void ControlDependenceNode::setTrue(ControlDependenceNode *Child) {
-  if (binaryControl) {
-    assert(Children.size() == 2);
-    Children[0] = Child;
-  } else {
-    assert(Children.size() == 0);
-    Children.push_back(Child);
-    Children.push_back(NULL);
-    binaryControl = true;
-  }
+void ControlDependenceNode::addTrue(ControlDependenceNode *Child) {
+  TrueChildren.push_back(Child);
 }
 
-void ControlDependenceNode::setFalse(ControlDependenceNode *Child) {
-  if (binaryControl) {
-    assert(Children.size() == 2);
-    Children[1] = Child;
-  } else {
-    assert(Children.size() == 0);
-    Children.push_back(NULL);
-    Children.push_back(Child);
-    binaryControl = true;
-  }
+void ControlDependenceNode::addFalse(ControlDependenceNode *Child) {
+  FalseChildren.push_back(Child);
 }
 
 void ControlDependenceNode::addOther(ControlDependenceNode *Child) {
-  assert(!binaryControl);
-  Children.push_back(Child);
+  OtherChildren.push_back(Child);
 }
 
 void ControlDependenceNode::addParent(ControlDependenceNode *Parent) {
-  const_iterator I = std::find(Parent->begin(), Parent->end(), this);
-  assert(I != Parent->end() && "Must be a child before adding a parent!");
+  assert(std::find(Parent->begin(), Parent->end(), this) != Parent->end()
+  	 && "Must be a child before adding the parent!");
   Parents.push_back(Parent);
 }
 
-ControlDependenceNode::EdgeType ControlDependenceNode::getEdgeType(const ControlDependenceNode *other) const {
-  if (!other || isRegion() || other->isRegion()) return OTHER;
-
-  if (const BranchInst *b = dyn_cast<BranchInst>(TheBB->getTerminator())) {
+ControlDependenceNode::EdgeType
+ControlDependenceGraph::getEdgeType(const BasicBlock *A, const BasicBlock *B) {
+  if (const BranchInst *b = dyn_cast<BranchInst>(A->getTerminator())) {
     if (b->isConditional()) {
-      if (b->getSuccessor(0) == other->getBlock()) {
-	return TRUE;
+      if (b->getSuccessor(0) == B) {
+	return ControlDependenceNode::TRUE;
+      } else if (b->getSuccessor(1) == B) {
+	return ControlDependenceNode::FALSE;
       } else {
-	assert(b->getSuccessor(1) == other->getBlock());
-	return FALSE;
+	assert(false && "Asking for edge type between unconnected basic blocks!");
       }
     }
   }
-  return OTHER;
+  return ControlDependenceNode::OTHER;
 }
 
 void ControlDependenceGraph::computeDependencies(Function &F) {
@@ -96,36 +79,44 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
 
     for (succ_iterator succ = succ_begin(A), end = succ_end(A); succ != end; ++succ) {
       BasicBlock *B = *succ;
-      ControlDependenceNode *BN = bbMap[B];
       errs() << "Does " << B->getName() << " post-dominate " << A->getName() << "? ";
       if (A == B || !pdt.dominates(B,A)) {
 	errs() << "no\n";
 	BasicBlock *L = pdt.findNearestCommonDominator(A,B);
 	errs() << "\tleast common dominator is " << L->getName() << "\n";
-	ControlDependenceNode::EdgeType type = AN->getEdgeType(BN);
+	ControlDependenceNode::EdgeType type = ControlDependenceGraph::getEdgeType(A,B);
 	if (A == L) {
+	  errs() << "\t\tA == L, Adding ";
 	  switch (type) {
 	  case ControlDependenceNode::TRUE:
-	    AN->setTrue(AN); break;
+	    errs() << "TRUE";
+	    AN->addTrue(AN); break;
 	  case ControlDependenceNode::FALSE:
-	    AN->setFalse(AN); break;
+	    errs() << "FALSE";
+	    AN->addFalse(AN); break;
 	  case ControlDependenceNode::OTHER:
+	    errs() << "OTHER";
 	    AN->addOther(AN); break;
 	  }
 	  AN->addParent(AN);
+	  errs() << " self edge\n";
 	}
 	for (DomTreeNode *cur = pdt[B]; cur && cur != pdt[L]; cur = cur->getIDom()) {
-	  errs() << "\t\tAdding edge from " << A->getName() << " to " << cur->getBlock()->getName() << "\n";
+	  errs() << "\t\tAdding ";
 	  ControlDependenceNode *CN = bbMap[cur->getBlock()];
 	  switch (type) {
 	  case ControlDependenceNode::TRUE:
-	    AN->setTrue(CN); break;
+	    errs() << "TRUE";
+	    AN->addTrue(CN); break;
 	  case ControlDependenceNode::FALSE:
-	    AN->setFalse(CN); break;
+	    errs() << "FALSE";
+	    AN->addFalse(CN); break;
 	  case ControlDependenceNode::OTHER:
+	    errs() << "OTHER";
 	    AN->addOther(CN); break;
 	  }
 	  CN->addParent(AN);
+	  errs() << " edge from " << A->getName() << " to " << cur->getBlock()->getName() << "\n";
 	}
       } else {
 	errs() << "yes\n";
@@ -137,7 +128,7 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
   errs() << "Does " << F.getEntryBlock().getName() << " post-dominate ENTRY? no\n";
   errs() << "\tleast common dominator is EXIT\n";
   for (DomTreeNode *cur = pdt[&F.getEntryBlock()]; cur; cur = cur->getIDom()) {
-    errs() << "\t\tAdding edge from " << F.getEntryBlock().getName() << " to " << cur->getBlock()->getName() << "\n";
+    errs() << "\t\tAdding edge from ENTRY to " << cur->getBlock()->getName() << "\n";
     ControlDependenceNode *CN = bbMap[cur->getBlock()];
     root->addOther(CN); CN->addParent(root);
   }

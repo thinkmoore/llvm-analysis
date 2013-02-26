@@ -1,4 +1,4 @@
-//===- llvm/Analysis/ControlDependenceGraph.h -------------------*- C++ -*-===//
+//===- Analysis/ControlDependenceGraph.h ------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -22,8 +22,9 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/DOTGraphTraits.h"
 
-#include <vector>
 #include <map>
+#include <vector>
+#include <iterator>
 
 namespace llvm {
 
@@ -32,71 +33,111 @@ class ControlDependenceGraph;
 
 class ControlDependenceNode {
 public:
-  typedef std::vector<ControlDependenceNode *>::iterator iterator;
-  typedef std::vector<ControlDependenceNode *>::const_iterator const_iterator;
+  enum EdgeType { TRUE, FALSE, OTHER };
+  typedef std::vector<ControlDependenceNode *>::iterator       node_iterator;
+  typedef std::vector<ControlDependenceNode *>::const_iterator const_node_iterator;
 
-  iterator begin()             { return Children.begin(); }
-  iterator end()               { return Children.end(); }
-  const_iterator begin() const { return Children.begin(); }
-  const_iterator end()   const { return Children.end(); }
+  struct edge_iterator {
+    typedef node_iterator::value_type      value_type;
+    typedef node_iterator::difference_type difference_type;
+    typedef node_iterator::reference       reference;
+    typedef node_iterator::pointer         pointer;
+    typedef std::input_iterator_tag        iterator_category;
 
-  iterator parent_begin()             { return Parents.begin(); }
-  iterator parent_end()               { return Parents.end(); }
-  const_iterator parent_begin() const { return Parents.begin(); }
-  const_iterator parent_end()   const { return Parents.end(); }
+    edge_iterator(ControlDependenceNode *n) : 
+      node(n), stage(TRUE), it(n->TrueChildren.begin()), end(n->TrueChildren.end()) {
+      while ((stage != OTHER) && (it == end)) this->operator++();
+    }
+    edge_iterator(ControlDependenceNode *n, EdgeType t, node_iterator i, node_iterator e) :
+      node(n), stage(t), it(i), end(e) {
+      while ((stage != OTHER) && (it == end)) this->operator++();
+    }
+    EdgeType type() const { return stage; }
+    bool operator==(edge_iterator const &other) const { 
+      return (this->stage == other.stage) && (this->it == other.it);
+    }
+    bool operator!=(edge_iterator const &other) const { return !(*this == other); }
+    reference operator*()  { return *this->it; }
+    pointer   operator->() { return &*this->it; }
+    edge_iterator& operator++() {
+      if (it != end) ++it;
+      while ((stage != OTHER) && (it == end)) {
+	if (stage == TRUE) {
+	  it = node->FalseChildren.begin();
+	  end = node->FalseChildren.end();
+	  stage = FALSE;
+	} else {
+	  it = node->OtherChildren.begin();
+	  end = node->OtherChildren.end();
+	  stage = OTHER;
+	}
+      }
+      return *this;
+    }
+    edge_iterator operator++(int) {
+      edge_iterator ret(*this);
+      assert(ret.stage == OTHER || ret.it != ret.end);
+      this->operator++();
+      return ret;
+    }
+  private:
+    ControlDependenceNode *node;
+    EdgeType stage;
+    node_iterator it, end;
+  };
+
+  edge_iterator begin() { return edge_iterator(this); }
+  edge_iterator end()   { return edge_iterator(this, OTHER, OtherChildren.end(), OtherChildren.end()); }
+
+  node_iterator true_begin()   { return TrueChildren.begin(); }
+  node_iterator true_end()     { return TrueChildren.end(); }
+
+  node_iterator false_begin()  { return FalseChildren.begin(); }
+  node_iterator false_end()    { return FalseChildren.end(); }
+
+  node_iterator other_begin()  { return OtherChildren.begin(); }
+  node_iterator other_end()    { return OtherChildren.end(); }
+
+  node_iterator parent_begin() { return Parents.begin(); }
+  node_iterator parent_end()   { return Parents.end(); }
+  const_node_iterator parent_begin() const { return Parents.begin(); }
+  const_node_iterator parent_end()   const { return Parents.end(); }
 
   BasicBlock *getBlock() const { return TheBB; }
-  const ControlDependenceNode *getTrue() const {
-    assert(!binaryControl || Children.size() >= 2);
-    return binaryControl ? Children[0] : NULL;
-  }
-  ControlDependenceNode *getTrue() {
-    assert(!binaryControl || Children.size() >= 2);
-    return binaryControl ? Children[0] : NULL;
-  }
-  const ControlDependenceNode *getFalse() const { 
-    assert(!binaryControl || Children.size() >= 2);
-    return binaryControl ? Children[1] : NULL;
-  }
-  ControlDependenceNode *getFalse() {
-    assert(!binaryControl || Children.size() >= 2);
-    return binaryControl ? Children[1] : NULL;
-  }
-
   size_t getNumParents() const { return Parents.size(); }
-  size_t getNumChildren() const { return Children.size(); }
-  bool isBinary() const { return binaryControl; }
+  size_t getNumChildren() const { 
+    return TrueChildren.size() + FalseChildren.size() + OtherChildren.size();
+  }
   bool isRegion() const { return TheBB == NULL; }
-
-  enum EdgeType { TRUE, FALSE, OTHER };
-  EdgeType getEdgeType(const ControlDependenceNode *) const;
 
 private:
   BasicBlock *TheBB;
-  bool binaryControl;
   std::vector<ControlDependenceNode *> Parents;
-  std::vector<ControlDependenceNode *> Children;
+  std::vector<ControlDependenceNode *> TrueChildren;
+  std::vector<ControlDependenceNode *> FalseChildren;
+  std::vector<ControlDependenceNode *> OtherChildren;
 
   friend class ControlDependenceGraph;
 
-  void clearAllChildren() { 
-    Children.clear();
-    binaryControl = false;
+  void clearAllChildren() {
+    TrueChildren.clear();
+    FalseChildren.clear();
+    OtherChildren.clear();
   }
   void clearAllParents() { Parents.clear(); }
 
-  void setTrue(ControlDependenceNode *Child);
-  void setFalse(ControlDependenceNode *Child);
+  void addTrue(ControlDependenceNode *Child);
+  void addFalse(ControlDependenceNode *Child);
   void addOther(ControlDependenceNode *Child);
   void addParent(ControlDependenceNode *Parent);
 
-  ControlDependenceNode() : TheBB(NULL), binaryControl(false) {};
-  ControlDependenceNode(BasicBlock *bb) : TheBB(bb), binaryControl(false) {};  
+  ControlDependenceNode() : TheBB(NULL) {}
+  ControlDependenceNode(BasicBlock *bb) : TheBB(bb) {}
 };
 
 template <> struct GraphTraits<ControlDependenceNode *> {
   typedef ControlDependenceNode NodeType;
-  typedef NodeType::iterator ChildIteratorType;
+  typedef NodeType::edge_iterator ChildIteratorType;
 
   static NodeType *getEntryNode(NodeType *N) { return N; }
 
@@ -153,6 +194,7 @@ private:
   std::vector<ControlDependenceNode *> nodes;
   std::map<BasicBlock *,ControlDependenceNode *> bbMap;
 
+  static ControlDependenceNode::EdgeType getEdgeType(const BasicBlock *, const BasicBlock *);
   void computeDependencies(Function &F);
   void insertRegions();
 };
@@ -191,8 +233,8 @@ template <> struct DOTGraphTraits<ControlDependenceGraph*>
     }
   }
 
-  static std::string getEdgeSourceLabel(ControlDependenceNode *Node, ControlDependenceNode::iterator I) {
-    switch (Node->getEdgeType(*I)) {
+  static std::string getEdgeSourceLabel(ControlDependenceNode *Node, ControlDependenceNode::edge_iterator I) {
+    switch (I.type()) {
     case ControlDependenceNode::TRUE:
       return "T";
     case ControlDependenceNode::FALSE:
