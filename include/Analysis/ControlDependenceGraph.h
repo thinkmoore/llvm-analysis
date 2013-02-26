@@ -66,6 +66,18 @@ public:
   size_t getNumParents() const { return Parents.size(); }
   size_t getNumChildren() const { return Children.size(); }
   bool isBinary() const { return binaryControl; }
+  bool isRegion() const { return TheBB == NULL; }
+
+  enum EdgeType { TRUE, FALSE, OTHER };
+  EdgeType getEdgeType(const ControlDependenceNode *) const;
+
+private:
+  BasicBlock *TheBB;
+  bool binaryControl;
+  std::vector<ControlDependenceNode *> Parents;
+  std::vector<ControlDependenceNode *> Children;
+
+  friend class ControlDependenceGraph;
 
   void clearAllChildren() { 
     Children.clear();
@@ -78,16 +90,8 @@ public:
   void addOther(ControlDependenceNode *Child);
   void addParent(ControlDependenceNode *Parent);
 
-  bool isRegion() const { return TheBB == NULL; }
-
   ControlDependenceNode() : TheBB(NULL), binaryControl(false) {};
-  ControlDependenceNode(BasicBlock *bb) : TheBB(bb), binaryControl(false) {};
-
-private:
-  BasicBlock *TheBB;
-  bool binaryControl;
-  std::vector<ControlDependenceNode *> Parents;
-  std::vector<ControlDependenceNode *> Children;
+  ControlDependenceNode(BasicBlock *bb) : TheBB(bb), binaryControl(false) {};  
 };
 
 template <> struct GraphTraits<ControlDependenceNode *> {
@@ -148,6 +152,9 @@ private:
   ControlDependenceNode *root;
   std::vector<ControlDependenceNode *> nodes;
   std::map<BasicBlock *,ControlDependenceNode *> bbMap;
+
+  void computeDependencies(Function &F);
+  void insertRegions();
 };
 
 template <> struct GraphTraits<ControlDependenceGraph *>
