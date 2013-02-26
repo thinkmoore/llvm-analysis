@@ -64,8 +64,7 @@ void ControlDependenceNode::addParent(ControlDependenceNode *Parent) {
 }
 
 ControlDependenceNode::EdgeType ControlDependenceNode::getEdgeType(const ControlDependenceNode *other) const {
-  assert(other);
-  if (isRegion() || other->isRegion()) return OTHER;
+  if (!other || isRegion() || other->isRegion()) return OTHER;
 
   if (const BranchInst *b = dyn_cast<BranchInst>(TheBB->getTerminator())) {
     if (b->isConditional()) {
@@ -99,7 +98,7 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
       BasicBlock *B = *succ;
       ControlDependenceNode *BN = bbMap[B];
       errs() << "Does " << B->getName() << " post-dominate " << A->getName() << "? ";
-      if (!pdt.dominates(B,A)) {
+      if (A == B || !pdt.dominates(B,A)) {
 	errs() << "no\n";
 	BasicBlock *L = pdt.findNearestCommonDominator(A,B);
 	errs() << "\tleast common dominator is " << L->getName() << "\n";
