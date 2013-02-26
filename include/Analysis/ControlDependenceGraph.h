@@ -23,7 +23,7 @@
 #include "llvm/Support/DOTGraphTraits.h"
 
 #include <map>
-#include <vector>
+#include <set>
 #include <iterator>
 
 namespace llvm {
@@ -34,8 +34,8 @@ class ControlDependenceGraph;
 class ControlDependenceNode {
 public:
   enum EdgeType { TRUE, FALSE, OTHER };
-  typedef std::vector<ControlDependenceNode *>::iterator       node_iterator;
-  typedef std::vector<ControlDependenceNode *>::const_iterator const_node_iterator;
+  typedef std::set<ControlDependenceNode *>::iterator       node_iterator;
+  typedef std::set<ControlDependenceNode *>::const_iterator const_node_iterator;
 
   struct edge_iterator {
     typedef node_iterator::value_type      value_type;
@@ -109,13 +109,14 @@ public:
     return TrueChildren.size() + FalseChildren.size() + OtherChildren.size();
   }
   bool isRegion() const { return TheBB == NULL; }
+  const ControlDependenceNode *enclosingRegion() const;
 
 private:
   BasicBlock *TheBB;
-  std::vector<ControlDependenceNode *> Parents;
-  std::vector<ControlDependenceNode *> TrueChildren;
-  std::vector<ControlDependenceNode *> FalseChildren;
-  std::vector<ControlDependenceNode *> OtherChildren;
+  std::set<ControlDependenceNode *> Parents;
+  std::set<ControlDependenceNode *> TrueChildren;
+  std::set<ControlDependenceNode *> FalseChildren;
+  std::set<ControlDependenceNode *> OtherChildren;
 
   friend class ControlDependenceGraph;
 
@@ -130,6 +131,10 @@ private:
   void addFalse(ControlDependenceNode *Child);
   void addOther(ControlDependenceNode *Child);
   void addParent(ControlDependenceNode *Parent);
+  void removeTrue(ControlDependenceNode *Child);
+  void removeFalse(ControlDependenceNode *Child);
+  void removeOther(ControlDependenceNode *Child);
+  void removeParent(ControlDependenceNode *Child);
 
   ControlDependenceNode() : TheBB(NULL) {}
   ControlDependenceNode(BasicBlock *bb) : TheBB(bb) {}
@@ -164,7 +169,7 @@ public:
 
   ControlDependenceGraph() : FunctionPass(ID) {}
   ~ControlDependenceGraph() {
-    for (std::vector<ControlDependenceNode *>::iterator n = nodes.begin(), e = nodes.end();
+    for (ControlDependenceNode::node_iterator n = nodes.begin(), e = nodes.end();
 	 n != e; ++n)
       delete *n;
   }
@@ -188,10 +193,11 @@ public:
   }
   bool controls(BasicBlock *A, BasicBlock *B) const;
   bool influences(BasicBlock *A, BasicBlock *B) const;
+  const ControlDependenceNode *enclosingRegion(BasicBlock *BB) const;
 
 private:
   ControlDependenceNode *root;
-  std::vector<ControlDependenceNode *> nodes;
+  std::set<ControlDependenceNode *> nodes;
   std::map<BasicBlock *,ControlDependenceNode *> bbMap;
 
   static ControlDependenceNode::EdgeType getEdgeType(const BasicBlock *, const BasicBlock *);
