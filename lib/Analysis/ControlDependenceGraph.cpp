@@ -115,58 +115,45 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
 
     for (succ_iterator succ = succ_begin(A), end = succ_end(A); succ != end; ++succ) {
       BasicBlock *B = *succ;
-      errs() << "Does " << B->getName() << " post-dominate " << A->getName() << "? ";
+      assert(A && B);
       if (A == B || !pdt.dominates(B,A)) {
-	errs() << "no\n";
 	BasicBlock *L = pdt.findNearestCommonDominator(A,B);
-	errs() << "\tleast common dominator is " << L->getName() << "\n";
 	ControlDependenceNode::EdgeType type = ControlDependenceGraph::getEdgeType(A,B);
 	if (A == L) {
-	  errs() << "\t\tA == L, Adding ";
 	  switch (type) {
 	  case ControlDependenceNode::TRUE:
-	    errs() << "TRUE";
 	    AN->addTrue(AN); break;
 	  case ControlDependenceNode::FALSE:
-	    errs() << "FALSE";
 	    AN->addFalse(AN); break;
 	  case ControlDependenceNode::OTHER:
-	    errs() << "OTHER";
 	    AN->addOther(AN); break;
 	  }
 	  AN->addParent(AN);
-	  errs() << " self edge\n";
 	}
 	for (DomTreeNode *cur = pdt[B]; cur && cur != pdt[L]; cur = cur->getIDom()) {
-	  errs() << "\t\tAdding ";
 	  ControlDependenceNode *CN = bbMap[cur->getBlock()];
 	  switch (type) {
 	  case ControlDependenceNode::TRUE:
-	    errs() << "TRUE";
 	    AN->addTrue(CN); break;
 	  case ControlDependenceNode::FALSE:
-	    errs() << "FALSE";
 	    AN->addFalse(CN); break;
 	  case ControlDependenceNode::OTHER:
-	    errs() << "OTHER";
 	    AN->addOther(CN); break;
 	  }
+	  assert(CN);
 	  CN->addParent(AN);
-	  errs() << " edge from " << A->getName() << " to " << cur->getBlock()->getName() << "\n";
 	}
-      } else {
-	errs() << "yes\n";
       }
     }
   }
 
   // ENTRY -> START
-  errs() << "Does " << F.getEntryBlock().getName() << " post-dominate ENTRY? no\n";
-  errs() << "\tleast common dominator is EXIT\n";
   for (DomTreeNode *cur = pdt[&F.getEntryBlock()]; cur; cur = cur->getIDom()) {
-    errs() << "\t\tAdding edge from ENTRY to " << cur->getBlock()->getName() << "\n";
-    ControlDependenceNode *CN = bbMap[cur->getBlock()];
-    root->addOther(CN); CN->addParent(root);
+    if (cur->getBlock()) {
+      ControlDependenceNode *CN = bbMap[cur->getBlock()];
+      assert(CN);
+      root->addOther(CN); CN->addParent(root);
+    }
   }
 }
 
@@ -182,7 +169,11 @@ void ControlDependenceGraph::insertRegions() {
 
   for (po_pdt_iterator DTN = po_pdt_iterator::begin(&pdt), END = po_pdt_iterator::end(&pdt);
        DTN != END; ++DTN) {
+    if (!DTN->getBlock())
+      continue;
+
     ControlDependenceNode *node = bbMap[DTN->getBlock()];
+    assert(node);
 
     cd_set_type cds;
     for (ControlDependenceNode::node_iterator P = node->Parents.begin(), E = node->Parents.end(); P != E; ++P) {
