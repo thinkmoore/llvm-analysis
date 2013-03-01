@@ -166,6 +166,9 @@ void ControlDependenceGraph::insertRegions() {
   typedef std::map<cd_set_type, ControlDependenceNode *> cd_map_type;
 
   cd_map_type cdMap;
+  cd_set_type initCDs;
+  initCDs.insert(std::make_pair(ControlDependenceNode::OTHER, root));
+  cdMap.insert(std::make_pair(initCDs,root));
 
   for (po_pdt_iterator DTN = po_pdt_iterator::begin(&pdt), END = po_pdt_iterator::end(&pdt);
        DTN != END; ++DTN) {
