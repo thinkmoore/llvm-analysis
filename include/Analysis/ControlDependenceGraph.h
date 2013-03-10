@@ -19,7 +19,6 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/Pass.h"
 #include "llvm/Support/DOTGraphTraits.h"
 
 #include <map>
@@ -29,7 +28,7 @@
 namespace llvm {
 
 class BasicBlock;
-class ControlDependenceGraph;
+class ControlDependenceGraphBase;
 
 class ControlDependenceNode {
 public:
@@ -118,7 +117,7 @@ private:
   std::set<ControlDependenceNode *> FalseChildren;
   std::set<ControlDependenceNode *> OtherChildren;
 
-  friend class ControlDependenceGraph;
+  friend class ControlDependenceGraphBase;
 
   void clearAllChildren() {
     TrueChildren.clear();
@@ -163,23 +162,19 @@ template <> struct GraphTraits<ControlDependenceNode *> {
   }
 };
   
-class ControlDependenceGraph : public FunctionPass {
+class ControlDependenceGraphBase {
 public:
-  static char ID; // Pass identification, replacement for typeid
-
-  ControlDependenceGraph() : FunctionPass(ID) {}
-  ~ControlDependenceGraph() {
+  ControlDependenceGraphBase() : root(NULL) {}
+  virtual ~ControlDependenceGraphBase() { releaseMemory(); }
+  virtual void releaseMemory() {
     for (ControlDependenceNode::node_iterator n = nodes.begin(), e = nodes.end();
-	 n != e; ++n)
-      delete *n;
+	 n != e; ++n) delete *n;
+    nodes.clear();
+    bbMap.clear();
+    root = NULL;
   }
 
-  virtual bool runOnFunction(Function &F);
-
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.addRequired<PostDominatorTree>();
-    AU.setPreservesAll();
-  }
+  void graphForFunction(Function &F, PostDominatorTree &pdt);
 
   ControlDependenceNode *getRoot()             { return root; }
   const ControlDependenceNode *getRoot() const { return root; }
@@ -199,56 +194,9 @@ private:
   ControlDependenceNode *root;
   std::set<ControlDependenceNode *> nodes;
   std::map<BasicBlock *,ControlDependenceNode *> bbMap;
-
   static ControlDependenceNode::EdgeType getEdgeType(const BasicBlock *, const BasicBlock *);
-  void computeDependencies(Function &F);
-  void insertRegions();
-};
-
-template <> struct GraphTraits<ControlDependenceGraph *>
-  : public GraphTraits<ControlDependenceNode *> {
-  static NodeType *getEntryNode(ControlDependenceGraph *CD) {
-    return CD->getRoot();
-  }
-
-  static nodes_iterator nodes_begin(ControlDependenceGraph *CD) {
-    if (getEntryNode(CD))
-      return df_begin(getEntryNode(CD));
-    else
-      return df_end(getEntryNode(CD));
-  }
-
-  static nodes_iterator nodes_end(ControlDependenceGraph *CD) {
-    return df_end(getEntryNode(CD));
-  }
-};
-
-template <> struct DOTGraphTraits<ControlDependenceGraph*>
-  : public DefaultDOTGraphTraits {
-  DOTGraphTraits(bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
-
-  static std::string getGraphName(ControlDependenceGraph *Graph) {
-    return "Control dependence graph";
-  }
-
-  std::string getNodeLabel(ControlDependenceNode *Node, ControlDependenceGraph *Graph) {
-    if (Node->isRegion()) {
-      return "REGION";
-    } else {
-      return Node->getBlock()->hasName() ? Node->getBlock()->getName() : "ENTRY";
-    }
-  }
-
-  static std::string getEdgeSourceLabel(ControlDependenceNode *Node, ControlDependenceNode::edge_iterator I) {
-    switch (I.type()) {
-    case ControlDependenceNode::TRUE:
-      return "T";
-    case ControlDependenceNode::FALSE:
-      return "F";
-    case ControlDependenceNode::OTHER:
-      return "";
-    }
-  }
+  void computeDependencies(Function &F, PostDominatorTree &pdt);
+  void insertRegions(PostDominatorTree &pdt);
 };
 
 } // namespace llvm

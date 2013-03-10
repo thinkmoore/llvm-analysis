@@ -15,10 +15,13 @@
 
 #include "Analysis/ControlDependenceGraph.h"
 
-#include "llvm/Function.h"
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/Function.h"
+#include "llvm/Module.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/CFG.h"
+
 
 #include <deque>
 #include <set>
@@ -26,8 +29,6 @@
 using namespace llvm;
 
 namespace llvm {
-
-char ControlDependenceGraph::ID = 0;
 
 void ControlDependenceNode::addTrue(ControlDependenceNode *Child) {
   TrueChildren.insert(Child);
@@ -83,7 +84,7 @@ const ControlDependenceNode *ControlDependenceNode::enclosingRegion() const {
 }
 
 ControlDependenceNode::EdgeType
-ControlDependenceGraph::getEdgeType(const BasicBlock *A, const BasicBlock *B) {
+ControlDependenceGraphBase::getEdgeType(const BasicBlock *A, const BasicBlock *B) {
   if (const BranchInst *b = dyn_cast<BranchInst>(A->getTerminator())) {
     if (b->isConditional()) {
       if (b->getSuccessor(0) == B) {
@@ -98,11 +99,10 @@ ControlDependenceGraph::getEdgeType(const BasicBlock *A, const BasicBlock *B) {
   return ControlDependenceNode::OTHER;
 }
 
-void ControlDependenceGraph::computeDependencies(Function &F) {
-  PostDominatorTree &pdt = getAnalysis<PostDominatorTree>();
-
+void ControlDependenceGraphBase::computeDependencies(Function &F, PostDominatorTree &pdt) {
   root = new ControlDependenceNode();
   nodes.insert(root);
+
   for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB) {
     ControlDependenceNode *bn = new ControlDependenceNode(BB);
     nodes.insert(bn);
@@ -118,7 +118,7 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
       assert(A && B);
       if (A == B || !pdt.dominates(B,A)) {
 	BasicBlock *L = pdt.findNearestCommonDominator(A,B);
-	ControlDependenceNode::EdgeType type = ControlDependenceGraph::getEdgeType(A,B);
+	ControlDependenceNode::EdgeType type = ControlDependenceGraphBase::getEdgeType(A,B);
 	if (A == L) {
 	  switch (type) {
 	  case ControlDependenceNode::TRUE:
@@ -157,9 +157,7 @@ void ControlDependenceGraph::computeDependencies(Function &F) {
   }
 }
 
-void ControlDependenceGraph::insertRegions() {
-  PostDominatorTree &pdt = getAnalysis<PostDominatorTree>();
-
+void ControlDependenceGraphBase::insertRegions(PostDominatorTree &pdt) {
   typedef po_iterator<PostDominatorTree*> po_pdt_iterator;  
   typedef std::pair<ControlDependenceNode::EdgeType, ControlDependenceNode *> cd_type;
   typedef std::set<cd_type> cd_set_type;
@@ -273,13 +271,12 @@ void ControlDependenceGraph::insertRegions() {
   }
 }
 
-bool ControlDependenceGraph::runOnFunction(Function &F) {
-  computeDependencies(F);
-  insertRegions();
-  return false;
+void ControlDependenceGraphBase::graphForFunction(Function &F, PostDominatorTree &pdt) {
+  computeDependencies(F,pdt);
+  insertRegions(pdt);
 }
 
-bool ControlDependenceGraph::controls(BasicBlock *A, BasicBlock *B) const {
+bool ControlDependenceGraphBase::controls(BasicBlock *A, BasicBlock *B) const {
   const ControlDependenceNode *n = getNode(B);
   assert(n && "Basic block not in control dependence graph!");
   while (n->getNumParents() == 1) {
@@ -290,7 +287,7 @@ bool ControlDependenceGraph::controls(BasicBlock *A, BasicBlock *B) const {
   return false;
 }
 
-bool ControlDependenceGraph::influences(BasicBlock *A, BasicBlock *B) const {
+bool ControlDependenceGraphBase::influences(BasicBlock *A, BasicBlock *B) const {
   const ControlDependenceNode *n = getNode(B);
   assert(n && "Basic block not in control dependence graph!");
 
@@ -307,13 +304,107 @@ bool ControlDependenceGraph::influences(BasicBlock *A, BasicBlock *B) const {
   return false;
 }
 
-const ControlDependenceNode *ControlDependenceGraph::enclosingRegion(BasicBlock *BB) const {
+const ControlDependenceNode *ControlDependenceGraphBase::enclosingRegion(BasicBlock *BB) const {
   if (const ControlDependenceNode *node = this->getNode(BB)) {
     return node->enclosingRegion();
   } else {
     return NULL;
   }
 }
+
+class ControlDependenceGraph : public FunctionPass, public ControlDependenceGraphBase {
+public:
+  static char ID;
+
+  ControlDependenceGraph() : FunctionPass(ID), ControlDependenceGraphBase() {}
+  virtual ~ControlDependenceGraph() { }
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<PostDominatorTree>();
+    AU.setPreservesAll();
+  }
+  virtual bool runOnFunction(Function &F) {
+    PostDominatorTree &pdt = getAnalysis<PostDominatorTree>();
+    graphForFunction(F,pdt);
+    return false;
+  }
+};
+
+class ControlDependenceGraphs : public ModulePass {
+public:
+  static char ID;
+
+  ControlDependenceGraphs() : ModulePass(ID) {}
+  virtual ~ControlDependenceGraphs() {
+    graphs.clear();
+  }
+
+  virtual bool runOnModule(Module &M) {
+    for (Module::iterator F = M.begin(), E = M.end(); F != E; ++F) {
+      if (F->isDeclaration())
+	continue;
+      ControlDependenceGraphBase &cdg = graphs[F];
+      PostDominatorTree &pdt = getAnalysis<PostDominatorTree>(*F);
+      cdg.graphForFunction(*F,pdt);
+    }
+    return false;
+  }
+
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<PostDominatorTree>();
+    AU.setPreservesAll();
+  }
+
+  ControlDependenceGraphBase &operator[](Function *F) { return graphs[F]; }
+  ControlDependenceGraphBase &graphFor(Function *F) { return graphs[F]; }
+private:
+  std::map<const Function *, ControlDependenceGraphBase> graphs;
+};
+
+template <> struct GraphTraits<ControlDependenceGraph *>
+  : public GraphTraits<ControlDependenceNode *> {
+  static NodeType *getEntryNode(ControlDependenceGraph *CD) {
+    return CD->getRoot();
+  }
+
+  static nodes_iterator nodes_begin(ControlDependenceGraph *CD) {
+    if (getEntryNode(CD))
+      return df_begin(getEntryNode(CD));
+    else
+      return df_end(getEntryNode(CD));
+  }
+
+  static nodes_iterator nodes_end(ControlDependenceGraph *CD) {
+    return df_end(getEntryNode(CD));
+  }
+};
+
+template <> struct DOTGraphTraits<ControlDependenceGraph *>
+  : public DefaultDOTGraphTraits {
+  DOTGraphTraits(bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
+
+  static std::string getGraphName(ControlDependenceGraph *Graph) {
+    return "Control dependence graph";
+  }
+
+  std::string getNodeLabel(ControlDependenceNode *Node, ControlDependenceGraph *Graph) {
+    if (Node->isRegion()) {
+      return "REGION";
+    } else {
+      return Node->getBlock()->hasName() ? Node->getBlock()->getName() : "ENTRY";
+    }
+  }
+
+  static std::string getEdgeSourceLabel(ControlDependenceNode *Node, ControlDependenceNode::edge_iterator I) {
+    switch (I.type()) {
+    case ControlDependenceNode::TRUE:
+      return "T";
+    case ControlDependenceNode::FALSE:
+      return "F";
+    case ControlDependenceNode::OTHER:
+      return "";
+    }
+  }
+};
 
 } // namespace llvm
 
@@ -335,6 +426,16 @@ struct ControlDependencePrinter
 
 } // end anonymous namespace
 
+char ControlDependenceGraph::ID = 0;
+static RegisterPass<ControlDependenceGraph> Graph("function-control-deps",
+						  "Compute control dependency graphs",
+						  true, true);
+
+char ControlDependenceGraphs::ID = 0;
+static RegisterPass<ControlDependenceGraphs> Graphs("module-control-deps",
+						    "Compute control dependency graphs for an entire module",
+						    true, true);
+
 char ControlDependenceViewer::ID = 0;
 static RegisterPass<ControlDependenceViewer> Viewer("view-control-deps",
 						    "View the control dependency graph",
@@ -344,7 +445,3 @@ char ControlDependencePrinter::ID = 0;
 static RegisterPass<ControlDependencePrinter> Printer("print-control-deps",
 						      "Print the control dependency graph as a 'dot' file",
 						      true, true);
-
-static RegisterPass<ControlDependenceGraph> Graph("control-deps",
-						  "Compute control dependency graphs",
-						  true, true);
