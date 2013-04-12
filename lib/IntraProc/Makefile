@@ -1,6 +1,6 @@
 LEVEL = ../..
 
-LIBRARYNAME = Analysis
+LIBRARYNAME = IntraProcAnalysis
 BUILD_ARCHIVE = 1
 LOADABLE_MODULE = 1
 

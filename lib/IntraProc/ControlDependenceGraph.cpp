@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Analysis/ControlDependenceGraph.h"
+#include "IntraProc/ControlDependenceGraph.h"
 
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/ADT/PostOrderIterator.h"

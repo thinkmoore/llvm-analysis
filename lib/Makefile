@@ -8,6 +8,6 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-DIRS=Analysis
+DIRS=IntraProc
 
 include $(LEVEL)/Makefile.common
