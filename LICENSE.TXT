@@ -1,5 +1,10 @@
-Copyright (c) 2013 Scott Moore, Harvard University
+Copyright (c) 2013 President and Fellows of Harvard College
 All rights reserved.
+
+Developed by:
+
+    Scott Moore
+    Harvard School of Engineering and Applied Science
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -13,10 +18,9 @@ met:
     the documentation and/or other materials provided with the
     distribution.
 
-    Neither the name of the Harvard University nor the
-    names of its contributors may be used to endorse or promote
-    products derived from this software without specific prior written
-    permission.
+    Neither the name of the Harvard University nor the names of the
+    developers may be used to endorse or promote products derived
+    from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
