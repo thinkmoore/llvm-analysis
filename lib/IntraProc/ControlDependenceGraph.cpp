@@ -1,9 +1,8 @@
-//===- Analysis/ControlDependenceGraph.cpp ----------------------*- C++ -*-===//
+//===- IntraProc/ControlDependenceGraph.cpp ---------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
+//                      Static Program Analysis for LLVM
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// This file is distributed under a Modified BSD License (see LICENSE.TXT).
 //
 //===----------------------------------------------------------------------===//
 //
