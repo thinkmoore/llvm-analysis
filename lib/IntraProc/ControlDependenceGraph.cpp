@@ -16,8 +16,8 @@
 
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/Function.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/CFG.h"
 
 
 #include <deque>
@@ -249,6 +249,7 @@ void ControlDependenceGraphBase::insertRegions(PostDominatorTree &pdt) {
 	node->removeTrue(child);
       }
       node->addTrue(region);
+      region->addParent(node);
     }
 
     // Fix too many false nodes
@@ -264,6 +265,7 @@ void ControlDependenceGraphBase::insertRegions(PostDominatorTree &pdt) {
 	node->removeFalse(child);
       }
       node->addFalse(region);
+      region->addParent(node);
     }
   }
 }
